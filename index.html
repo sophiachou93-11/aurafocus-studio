@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AuraFocus Studio - 沉浸式專注工坊</title>
+  <meta name="description" content="沉浸式專注工坊：Web Audio 白噪音混音、番茄鐘、呼吸放鬆與任務清單（單一 index.html 自包含版本）">
+  <style>
+    :root {
+      --bg: #FAF8F5;
+      --surface: #FFFFFF;
+      --surface-subtle: #F5F1EB;
+      --border: rgba(140, 109, 83, 0.16);
+      --text-main: #2D2825;
+      --text-muted: #6E645D;
+      --accent: #C28B62;
+      --accent-soft: #F7EFE8;
+      --success: #3D7A5A;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif;
+      background: var(--bg);
+      color: var(--text-main);
+      line-height: 1.5;
+      padding-bottom: 40px;
+    }
+    .tabular-nums { font-variant-numeric: tabular-nums; }
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .brand { font-size: 1.15rem; font-weight: 700; color: var(--text-main); }
+    .brand-tag { font-size: 0.8rem; color: var(--text-muted); margin-left: 8px; font-weight: 400; }
+    .container { max-width: 1100px; margin: 28px auto; padding: 0 16px; }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+    @media (min-width: 860px) { .grid { grid-template-columns: 1fr 1fr; } }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+    }
+    .card-title { font-size: 1.05rem; font-weight: 600; margin-bottom: 4px; }
+    .card-desc { font-size: 0.78rem; color: var(--text-muted); margin-bottom: 16px; }
+    
+    /* Pomodoro UI */
+    .timer-tabs { display: flex; gap: 6px; background: var(--surface-subtle); padding: 4px; border-radius: 10px; margin-bottom: 16px; }
+    .timer-tab { flex: 1; padding: 6px 10px; border: none; background: transparent; font-size: 0.8rem; font-weight: 500; border-radius: 6px; cursor: pointer; color: var(--text-muted); }
+    .timer-tab.active { background: #fff; color: var(--text-main); font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .timer-circle-wrap { position: relative; width: 200px; height: 200px; margin: 12px auto; display: flex; align-items: center; justify-content: center; }
+    .timer-svg { transform: rotate(-90deg); width: 100%; height: 100%; }
+    .timer-display { position: absolute; text-align: center; }
+    .timer-time { font-size: 2.4rem; font-weight: 700; font-family: monospace; }
+    .timer-mode-label { font-size: 0.75rem; letter-spacing: 1px; color: var(--text-muted); }
+    .timer-actions { display: flex; justify-content: center; gap: 10px; margin-top: 16px; }
+    .btn { padding: 9px 18px; border-radius: 10px; border: 1px solid transparent; font-size: 0.85rem; font-weight: 500; cursor: pointer; transition: 0.15s; }
+    .btn-primary { background: var(--text-main); color: #fff; }
+    .btn-primary:hover { background: #443c37; }
+    .btn-secondary { background: var(--surface-subtle); color: var(--text-main); border-color: var(--border); }
+    .btn-secondary:hover { background: #ebe5dc; }
+    
+    /* Sound tracks */
+    .tracks-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .track-item { background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 12px; padding: 14px; transition: 0.2s; }
+    .track-item.playing { background: var(--accent-soft); border-color: var(--accent); }
+    .track-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .track-name { font-size: 0.88rem; font-weight: 600; }
+    .track-sub { font-size: 0.7rem; color: var(--text-muted); }
+    .track-toggle { padding: 4px 10px; border-radius: 6px; font-size: 0.72rem; font-weight: 600; border: none; cursor: pointer; background: #ddd; color: #444; }
+    .track-item.playing .track-toggle { background: var(--text-main); color: #fff; }
+    .vol-slider { width: 100%; accent-color: var(--text-main); cursor: pointer; }
+    
+    /* Breathing */
+    .breath-stage { text-align: center; padding: 20px 0; }
+    .breath-circle {
+      width: 160px; height: 160px; border-radius: 50%; margin: 16px auto;
+      background: linear-gradient(135deg, #f7efe8, #e8ede9);
+      border: 2px solid var(--border);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      transition: transform 4s ease-in-out;
+    }
+    .breath-circle.inhale { transform: scale(1.3); border-color: var(--accent); background: linear-gradient(135deg, #fae9dc, #dcefe3); }
+    .breath-circle.hold { transform: scale(1.25); border-color: var(--text-muted); }
+    .breath-circle.exhale { transform: scale(0.85); border-color: var(--border); }
+    
+    /* Task list */
+    .task-input-row { display: flex; gap: 8px; margin-bottom: 14px; }
+    .task-input { flex: 1; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.85rem; background: var(--surface-subtle); }
+    .task-list { list-style: none; max-height: 220px; overflow-y: auto; }
+    .task-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: var(--surface-subtle); border-radius: 8px; margin-bottom: 6px; font-size: 0.85rem; }
+    .task-row.done { text-decoration: line-through; opacity: 0.6; }
+    .badge { font-size: 0.72rem; padding: 2px 6px; border-radius: 4px; background: rgba(0,0,0,0.06); }
+    .footer-note { text-align: center; font-size: 0.75rem; color: var(--text-muted); margin-top: 36px; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div>
+      <span class="brand">AuraFocus Studio</span>
+      <span class="brand-tag">· 沉浸式專注工坊</span>
+    </div>
+    <div style="font-size: 0.78rem; color: var(--text-muted);">
+      Vibe Coding 互動網頁作業 · 100% 離線單一檔案
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="grid">
+      <!-- 1. Pomodoro Timer -->
+      <div class="card">
+        <h2 class="card-title">專注番茄鐘 (Pomodoro)</h2>
+        <p class="card-desc">依循 25 分鐘專注 + 5 分鐘間隔休息節奏，完畢發出原生磬鐘提示音。</p>
+        
+        <div class="timer-tabs">
+          <button class="timer-tab active" id="tabFocus" onclick="switchTimerMode('focus')">專注 25m</button>
+          <button class="timer-tab" id="tabShort" onclick="switchTimerMode('shortBreak')">短休 5m</button>
+          <button class="timer-tab" id="tabLong" onclick="switchTimerMode('longBreak')">長休 15m</button>
+        </div>
+
+        <div class="timer-circle-wrap">
+          <svg class="timer-svg" viewBox="0 0 200 200">
+            <circle cx="100" cy="100" r="85" stroke="#E7E2D7" stroke-width="8" fill="transparent"/>
+            <circle id="timerProgress" cx="100" cy="100" r="85" stroke="#C28B62" stroke-width="8" stroke-dasharray="534" stroke-dashoffset="0" stroke-linecap="round" fill="transparent" style="transition: stroke-dashoffset 0.8s ease;"/>
+          </svg>
+          <div class="timer-display">
+            <div class="timer-mode-label" id="timerLabel">FOCUS</div>
+            <div class="timer-time tabular-nums" id="timerTime">25:00</div>
+          </div>
+        </div>
+
+        <div class="timer-actions">
+          <button class="btn btn-secondary" onclick="resetTimer()">重設</button>
+          <button class="btn btn-primary" id="btnPlayPause" onclick="toggleTimer()">開始專注</button>
+          <button class="btn btn-secondary" onclick="skipTimer()">跳過</button>
+        </div>
+        <div style="text-align: center; margin-top: 14px; font-size: 0.78rem; color: var(--text-muted);">
+          今日已完成 <span id="cycleCount" style="font-weight: 700; color: var(--text-main);">0</span> 輪番茄循環
+        </div>
+      </div>
+
+      <!-- 2. Web Audio Synthesizer -->
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+          <h2 class="card-title">白噪音環境混音板</h2>
+          <span style="font-size: 0.75rem; color: var(--text-muted);">Web Audio API 即時運算</span>
+        </div>
+        <p class="card-desc">原生程序化聲學合成，無需外部 MP3 音檔，完全不受跨域或斷網影響。</p>
+
+        <div class="tracks-grid">
+          <!-- Rain -->
+          <div class="track-item" id="card-rain">
+            <div class="track-top">
+              <div>
+                <div class="track-name">細雨綿綿</div>
+                <div class="track-sub">Rain · 粉紅噪聲</div>
+              </div>
+              <button class="track-toggle" id="btn-rain" onclick="toggleTrack('rain')">開 / 關</button>
+            </div>
+            <input type="range" min="0" max="100" value="50" class="vol-slider" oninput="changeVol('rain', this.value)">
+          </div>
+
+          <!-- Waves -->
+          <div class="track-item" id="card-waves">
+            <div class="track-top">
+              <div>
+                <div class="track-name">海浪拍岸</div>
+                <div class="track-sub">Waves · 低頻潮湧</div>
+              </div>
+              <button class="track-toggle" id="btn-waves" onclick="toggleTrack('waves')">開 / 關</button>
+            </div>
+            <input type="range" min="0" max="100" value="40" class="vol-slider" oninput="changeVol('waves', this.value)">
+          </div>
+
+          <!-- Campfire -->
+          <div class="track-item" id="card-campfire">
+            <div class="track-top">
+              <div>
+                <div class="track-name">營火噼啪</div>
+                <div class="track-sub">Campfire · 木炭微鳴</div>
+              </div>
+              <button class="track-toggle" id="btn-campfire" onclick="toggleTrack('campfire')">開 / 關</button>
+            </div>
+            <input type="range" min="0" max="100" value="45" class="vol-slider" oninput="changeVol('campfire', this.value)">
+          </div>
+
+          <!-- Forest -->
+          <div class="track-item" id="card-forest">
+            <div class="track-top">
+              <div>
+                <div class="track-name">林間微風</div>
+                <div class="track-sub">Forest · 蟲鳴葉響</div>
+              </div>
+              <button class="track-toggle" id="btn-forest" onclick="toggleTrack('forest')">開 / 關</button>
+            </div>
+            <input type="range" min="0" max="100" value="35" class="vol-slider" oninput="changeVol('forest', this.value)">
+          </div>
+
+          <!-- Cafe -->
+          <div class="track-item" id="card-cafe">
+            <div class="track-top">
+              <div>
+                <div class="track-name">午後咖啡館</div>
+                <div class="track-sub">Cafe · 溫潤共鳴</div>
+              </div>
+              <button class="track-toggle" id="btn-cafe" onclick="toggleTrack('cafe')">開 / 關</button>
+            </div>
+            <input type="range" min="0" max="100" value="30" class="vol-slider" oninput="changeVol('cafe', this.value)">
+          </div>
+
+          <!-- Clock -->
+          <div class="track-item" id="card-clock">
+            <div class="track-top">
+              <div>
+                <div class="track-name">古董鐘擺</div>
+                <div class="track-sub">Clock · 規律定神</div>
+              </div>
+              <button class="track-toggle" id="btn-clock" onclick="toggleTrack('clock')">開 / 關</button>
+            </div>
+            <input type="range" min="0" max="100" value="25" class="vol-slider" oninput="changeVol('clock', this.value)">
+          </div>
+        </div>
+      </div>
+
+      <!-- 3. Guided Breathing -->
+      <div class="card">
+        <h2 class="card-title">4-7-8 引導式呼吸放鬆</h2>
+        <p class="card-desc">吸氣 4 秒 → 屏息 7 秒 → 緩慢吐氣 8 秒，快速切換自律神經與心流狀態。</p>
+
+        <div class="breath-stage">
+          <div class="breath-circle" id="breathOrb">
+            <span id="breathAction" style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted);">準備</span>
+            <span id="breathCountdown" style="font-size: 2.2rem; font-weight: 700; font-family: monospace;">4s</span>
+          </div>
+          <p id="breathHint" style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 14px;">點擊下方按鈕開始呼吸循環引導</p>
+          <button class="btn btn-primary" id="btnBreathToggle" onclick="toggleBreathing()">開始呼吸練習</button>
+        </div>
+      </div>
+
+      <!-- 4. Focus Tasks -->
+      <div class="card">
+        <h2 class="card-title">專注目標清單</h2>
+        <p class="card-desc">規劃今日重點工作，點擊項目可標記完成，資料即時保存於瀏覽器。</p>
+
+        <div class="task-input-row">
+          <input type="text" id="taskInput" class="task-input" placeholder="輸入專注事項（例：完成 Vibe Coding 作業）..." onkeydown="if(event.key==='Enter')addTask()">
+          <button class="btn btn-primary" onclick="addTask()">新增</button>
+        </div>
+
+        <ul class="task-list" id="taskList">
+          <!-- Dynamically populated -->
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-note">
+      AuraFocus Studio · 單一檔案標準作業實作 (HTML + CSS + JavaScript + Web Audio 原生整合)
+    </div>
+  </div>
+
+  <script>
+    // --- Web Audio Procedural Synthesis ---
+    let audioCtx = null;
+    const trackNodes = {};
+
+    function getAudioContext() {
+      if (!audioCtx) {
+        const AudioClass = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioClass();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      return audioCtx;
+    }
+
+    function createPinkNoiseBuffer(ctx) {
+      const bufferSize = ctx.sampleRate * 3;
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+      for (let i = 0; i < bufferSize; i++) {
+        const white = Math.random() * 2 - 1;
+        b0 = 0.99886 * b0 + white * 0.0555;
+        b1 = 0.99332 * b1 + white * 0.075;
+        b2 = 0.96900 * b2 + white * 0.153;
+        b3 = 0.86650 * b3 + white * 0.310;
+        b4 = 0.55000 * b4 + white * 0.532;
+        b5 = -0.7616 * b5 - white * 0.0168;
+        data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.536) * 0.11;
+        b6 = white * 0.1159;
+      }
+      return buffer;
+    }
+
+    function startSoundType(type, gainNode) {
+      const ctx = getAudioContext();
+      if (type === 'rain') {
+        const src = ctx.createBufferSource();
+        src.buffer = createPinkNoiseBuffer(ctx);
+        src.loop = true;
+        const lp = ctx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.value = 1000;
+        src.connect(lp);
+        lp.connect(gainNode);
+        src.start();
+        return { stop: () => { try { src.stop(); } catch(e){} } };
+      } else if (type === 'waves') {
+        const src = ctx.createBufferSource();
+        src.buffer = createPinkNoiseBuffer(ctx);
+        src.loop = true;
+        const lp = ctx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.value = 450;
+        const swellGain = ctx.createGain();
+        swellGain.gain.value = 0.3;
+        const lfo = ctx.createOscillator();
+        lfo.type = 'sine';
+        lfo.frequency.value = 0.12;
+        const lfoGain = ctx.createGain();
+        lfoGain.gain.value = 0.25;
+        lfo.connect(lfoGain);
+        lfoGain.connect(swellGain.gain);
+        src.connect(lp);
+        lp.connect(swellGain);
+        swellGain.connect(gainNode);
+        src.start();
+        lfo.start();
+        return { stop: () => { try { src.stop(); lfo.stop(); } catch(e){} } };
+      } else if (type === 'campfire') {
+        const src = ctx.createBufferSource();
+        src.buffer = createPinkNoiseBuffer(ctx);
+        src.loop = true;
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.value = 160;
+        src.connect(bp);
+        bp.connect(gainNode);
+        src.start();
+        let alive = true;
+        let tid;
+        const crackle = () => {
+          if (!alive) return;
+          tid = setTimeout(() => {
+            if (!alive) return;
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const g = ctx.createGain();
+            osc.frequency.setValueAtTime(300 + Math.random() * 800, now);
+            g.gain.setValueAtTime(0.18, now);
+            g.gain.exponentialRampToValueAtTime(0.0001, now + 0.04);
+            osc.connect(g);
+            g.connect(gainNode);
+            osc.start(now);
+            osc.stop(now + 0.05);
+            crackle();
+          }, 80 + Math.random() * 300);
+        };
+        crackle();
+        return { stop: () => { alive = false; clearTimeout(tid); try { src.stop(); } catch(e){} } };
+      } else if (type === 'forest') {
+        const src = ctx.createBufferSource();
+        src.buffer = createPinkNoiseBuffer(ctx);
+        src.loop = true;
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.value = 3200;
+        src.connect(bp);
+        bp.connect(gainNode);
+        src.start();
+        return { stop: () => { try { src.stop(); } catch(e){} } };
+      } else if (type === 'cafe') {
+        const src = ctx.createBufferSource();
+        src.buffer = createPinkNoiseBuffer(ctx);
+        src.loop = true;
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.value = 650;
+        src.connect(bp);
+        bp.connect(gainNode);
+        src.start();
+        return { stop: () => { try { src.stop(); } catch(e){} } };
+      } else if (type === 'clock') {
+        let alive = true;
+        let tick = true;
+        const intId = setInterval(() => {
+          if (!alive) return;
+          const now = ctx.currentTime;
+          const osc = ctx.createOscillator();
+          const g = ctx.createGain();
+          osc.frequency.setValueAtTime(tick ? 880 : 660, now);
+          tick = !tick;
+          g.gain.setValueAtTime(0.15, now);
+          g.gain.exponentialRampToValueAtTime(0.0001, now + 0.035);
+          osc.connect(g);
+          g.connect(gainNode);
+          osc.start(now);
+          osc.stop(now + 0.04);
+        }, 1000);
+        return { stop: () => { alive = false; clearInterval(intId); } };
+      }
+      return { stop: () => {} };
+    }
+
+    function playZenBell() {
+      const ctx = getAudioContext();
+      const now = ctx.currentTime;
+      [528, 1056, 1584].forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.frequency.setValueAtTime(freq, now);
+        g.gain.setValueAtTime(0.3 / (idx + 1), now);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 4.0);
+        osc.connect(g);
+        g.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 4.0);
+      });
+    }
+
+    function toggleTrack(type) {
+      const ctx = getAudioContext();
+      const card = document.getElementById('card-' + type);
+      const isPlaying = card.classList.contains('playing');
+      if (isPlaying) {
+        if (trackNodes[type]) {
+          trackNodes[type].source.stop();
+          trackNodes[type].gain.disconnect();
+          delete trackNodes[type];
+        }
+        card.classList.remove('playing');
+      } else {
+        const gain = ctx.createGain();
+        gain.connect(ctx.destination);
+        const slider = card.querySelector('input');
+        gain.gain.value = Number(slider.value) / 100;
+        const source = startSoundType(type, gain);
+        trackNodes[type] = { source, gain };
+        card.classList.add('playing');
+      }
+    }
+
+    function changeVol(type, val) {
+      if (trackNodes[type]) {
+        trackNodes[type].gain.gain.value = Number(val) / 100;
+      }
+    }
+
+    // --- Pomodoro Timer ---
+    const durations = { focus: 25 * 60, shortBreak: 5 * 60, longBreak: 15 * 60 };
+    let currentMode = 'focus';
+    let timeLeft = durations.focus;
+    let timerRunning = false;
+    let timerInterval = null;
+    let cycleCount = 0;
+
+    function renderTimer() {
+      const m = Math.floor(timeLeft / 60);
+      const s = timeLeft % 60;
+      document.getElementById('timerTime').innerText = String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+      const total = durations[currentMode];
+      const prog = total > 0 ? (total - timeLeft) / total : 0;
+      const circ = 534;
+      document.getElementById('timerProgress').style.strokeDashoffset = circ - prog * circ;
+    }
+
+    function switchTimerMode(mode) {
+      currentMode = mode;
+      timerRunning = false;
+      clearInterval(timerInterval);
+      document.getElementById('btnPlayPause').innerText = '開始專注';
+      document.getElementById('tabFocus').classList.toggle('active', mode === 'focus');
+      document.getElementById('tabShort').classList.toggle('active', mode === 'shortBreak');
+      document.getElementById('tabLong').classList.toggle('active', mode === 'longBreak');
+      document.getElementById('timerLabel').innerText = mode === 'focus' ? 'FOCUS' : mode === 'shortBreak' ? 'SHORT BREAK' : 'LONG BREAK';
+      timeLeft = durations[mode];
+      renderTimer();
+    }
+
+    function toggleTimer() {
+      getAudioContext();
+      timerRunning = !timerRunning;
+      document.getElementById('btnPlayPause').innerText = timerRunning ? '暫停' : '開始專注';
+      if (timerRunning) {
+        timerInterval = setInterval(() => {
+          if (timeLeft <= 1) {
+            clearInterval(timerInterval);
+            timerRunning = false;
+            document.getElementById('btnPlayPause').innerText = '開始專注';
+            playZenBell();
+            if (currentMode === 'focus') {
+              cycleCount++;
+              document.getElementById('cycleCount').innerText = cycleCount;
+              switchTimerMode('shortBreak');
+            } else {
+              switchTimerMode('focus');
+            }
+          } else {
+            timeLeft--;
+            renderTimer();
+          }
+        }, 1000);
+      } else {
+        clearInterval(timerInterval);
+      }
+    }
+
+    function resetTimer() {
+      timerRunning = false;
+      clearInterval(timerInterval);
+      document.getElementById('btnPlayPause').innerText = '開始專注';
+      timeLeft = durations[currentMode];
+      renderTimer();
+    }
+
+    function skipTimer() {
+      timeLeft = 1;
+    }
+
+    // --- Breathing ---
+    let breathRunning = false;
+    let breathInterval = null;
+    const breathPhases = [
+      { name: '吸氣 (Inhale)', class: 'inhale', sec: 4, hint: '鼻子深緩吸氣，感受腹部擴展...' },
+      { name: '屏息 (Hold)', class: 'hold', sec: 7, hint: '平靜屏息，保持肩頸肌肉放鬆...' },
+      { name: '吐氣 (Exhale)', class: 'exhale', sec: 8, hint: '由嘴唇緩緩平穩吐氣釋放壓力...' }
+    ];
+    let bPhaseIdx = 0;
+    let bSecLeft = 4;
+
+    function toggleBreathing() {
+      getAudioContext();
+      breathRunning = !breathRunning;
+      document.getElementById('btnBreathToggle').innerText = breathRunning ? '暫停呼吸' : '開始呼吸練習';
+      if (breathRunning) {
+        stepBreath();
+        breathInterval = setInterval(() => {
+          bSecLeft--;
+          document.getElementById('breathCountdown').innerText = bSecLeft + 's';
+          if (bSecLeft <= 0) {
+            bPhaseIdx = (bPhaseIdx + 1) % breathPhases.length;
+            stepBreath();
+          }
+        }, 1000);
+      } else {
+        clearInterval(breathInterval);
+      }
+    }
+
+    function stepBreath() {
+      const cur = breathPhases[bPhaseIdx];
+      bSecLeft = cur.sec;
+      const orb = document.getElementById('breathOrb');
+      orb.className = 'breath-circle ' + cur.class;
+      orb.style.transitionDuration = cur.sec + 's';
+      document.getElementById('breathAction').innerText = cur.name;
+      document.getElementById('breathCountdown').innerText = bSecLeft + 's';
+      document.getElementById('breathHint').innerText = cur.hint;
+    }
+
+    // --- Tasks ---
+    let tasks = JSON.parse(localStorage.getItem('aurafocus_tasks') || '[]');
+    if (tasks.length === 0) {
+      tasks = [
+        { id: '1', title: '完成 Vibe Coding 互動網頁設計', done: false },
+        { id: '2', title: '整理規格書與 AI 對話記錄', done: false },
+        { id: '3', title: '部署至 GitHub Pages 並繳交作業', done: false }
+      ];
+    }
+
+    function renderTasks() {
+      const ul = document.getElementById('taskList');
+      ul.innerHTML = '';
+      tasks.forEach((t, idx) => {
+        const li = document.createElement('li');
+        li.className = 'task-row ' + (t.done ? 'done' : '');
+        li.innerHTML = `
+          <span style="cursor: pointer;" onclick="toggleTask(${idx})">${t.done ? '☑' : '☐'} ${t.title}</span>
+          <button style="border:none; background:transparent; color:#999; cursor:pointer;" onclick="deleteTask(${idx})">✕</button>
+        `;
+        ul.appendChild(li);
+      });
+      localStorage.setItem('aurafocus_tasks', JSON.stringify(tasks));
+    }
+
+    function addTask() {
+      const inp = document.getElementById('taskInput');
+      if (inp.value.trim()) {
+        tasks.push({ id: Date.now().toString(), title: inp.value.trim(), done: false });
+        inp.value = '';
+        renderTasks();
+      }
+    }
+
+    function toggleTask(idx) {
+      tasks[idx].done = !tasks[idx].done;
+      renderTasks();
+    }
+
+    function deleteTask(idx) {
+      tasks.splice(idx, 1);
+      renderTasks();
+    }
+
+    // Initial render
+    renderTimer();
+    renderTasks();
+  </script>
+</body>
+</html>
