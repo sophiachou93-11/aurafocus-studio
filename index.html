@@ -121,6 +121,49 @@
         <h2 class="card-title">專注番茄鐘 (Pomodoro)</h2>
         <p class="card-desc">依循 25 分鐘專注 + 5 分鐘間隔休息節奏，完畢發出原生磬鐘提示音。</p>
         
+<details style="margin-bottom:16px;">
+  <summary style="cursor:pointer; font-size:0.85rem;">
+    ⚙️ 個人化計時設定
+  </summary>
+
+  <div style="display:grid;
+              grid-template-columns:repeat(3,minmax(0,1fr));
+              gap:8px; margin-top:12px;">
+
+    <label style="font-size:0.8rem;">
+      專注（分鐘）
+      <input type="number" id="focusMinutes"
+             min="1" max="120" value="25"
+             class="task-input" style="width:100%;">
+    </label>
+
+    <label style="font-size:0.8rem;">
+      短休（分鐘）
+      <input type="number" id="shortMinutes"
+             min="1" max="60" value="5"
+             class="task-input" style="width:100%;">
+    </label>
+
+    <label style="font-size:0.8rem;">
+      長休（分鐘）
+      <input type="number" id="longMinutes"
+             min="1" max="60" value="15"
+             class="task-input" style="width:100%;">
+    </label>
+
+  </div>
+
+  <button class="btn btn-secondary"
+          style="margin-top:12px;width:100%;"
+          onclick="saveTimerSettings()">
+    儲存計時設定
+  </button>
+
+  <p id="timerSettingsMsg"
+     style="font-size:0.75rem;margin-top:8px;"
+     role="status"></p>
+</details>
+
         <div class="timer-tabs">
           <button class="timer-tab active" id="tabFocus" onclick="switchTimerMode('focus')">專注 25m</button>
           <button class="timer-tab" id="tabShort" onclick="switchTimerMode('shortBreak')">短休 5m</button>
@@ -457,75 +500,264 @@
     }
 
     // --- Pomodoro Timer ---
-    const durations = { focus: 25 * 60, shortBreak: 5 * 60, longBreak: 15 * 60 };
-    let currentMode = 'focus';
-    let timeLeft = durations.focus;
-    let timerRunning = false;
-    let timerInterval = null;
-    let cycleCount = 0;
+    
+// --- Pomodoro Timer V1.1 ---
+const durations = {
+  focus: 25 * 60,
+  shortBreak: 5 * 60,
+  longBreak: 15 * 60
+};
 
-    function renderTimer() {
-      const m = Math.floor(timeLeft / 60);
-      const s = timeLeft % 60;
-      document.getElementById('timerTime').innerText = String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
-      const total = durations[currentMode];
-      const prog = total > 0 ? (total - timeLeft) / total : 0;
-      const circ = 534;
-      document.getElementById('timerProgress').style.strokeDashoffset = circ - prog * circ;
-    }
+try {
+  const saved = JSON.parse(
+    localStorage.getItem('auraTimerSettings')
+  );
 
-    function switchTimerMode(mode) {
-      currentMode = mode;
-      timerRunning = false;
-      clearInterval(timerInterval);
-      document.getElementById('btnPlayPause').innerText = '開始專注';
-      document.getElementById('tabFocus').classList.toggle('active', mode === 'focus');
-      document.getElementById('tabShort').classList.toggle('active', mode === 'shortBreak');
-      document.getElementById('tabLong').classList.toggle('active', mode === 'longBreak');
-      document.getElementById('timerLabel').innerText = mode === 'focus' ? 'FOCUS' : mode === 'shortBreak' ? 'SHORT BREAK' : 'LONG BREAK';
-      timeLeft = durations[mode];
-      renderTimer();
-    }
-
-    function toggleTimer() {
-      getAudioContext();
-      timerRunning = !timerRunning;
-      document.getElementById('btnPlayPause').innerText = timerRunning ? '暫停' : '開始專注';
-      if (timerRunning) {
-        timerInterval = setInterval(() => {
-          if (timeLeft <= 1) {
-            clearInterval(timerInterval);
-            timerRunning = false;
-            document.getElementById('btnPlayPause').innerText = '開始專注';
-            playZenBell();
-            if (currentMode === 'focus') {
-              cycleCount++;
-              document.getElementById('cycleCount').innerText = cycleCount;
-              switchTimerMode('shortBreak');
-            } else {
-              switchTimerMode('focus');
-            }
-          } else {
-            timeLeft--;
-            renderTimer();
-          }
-        }, 1000);
-      } else {
-        clearInterval(timerInterval);
+  if (saved) {
+    for (const key of Object.keys(durations)) {
+      const max = key === 'focus' ? 7200 : 3600;
+      if (Number.isInteger(saved[key]) &&
+          saved[key] >= 60 && saved[key] <= max) {
+        durations[key] = saved[key];
       }
     }
+  }
+} catch (e) {
+  console.warn('無法讀取計時設定', e);
+}
 
-    function resetTimer() {
-      timerRunning = false;
-      clearInterval(timerInterval);
-      document.getElementById('btnPlayPause').innerText = '開始專注';
-      timeLeft = durations[currentMode];
-      renderTimer();
-    }
+let currentMode = 'focus';
+let timeLeft = durations.focus;
+let timerRunning = false;
+let timerInterval = null;
+let endTime = 0;
+let remainingMs = timeLeft * 1000;
+let cycleCount = 0;
+let roundCount = 0;
 
-    function skipTimer() {
-      timeLeft = 1;
+function updateTimerTabs() {
+  document.getElementById('tabFocus').innerText =
+    `專注 ${durations.focus / 60}m`;
+
+  document.getElementById('tabShort').innerText =
+    `短休 ${durations.shortBreak / 60}m`;
+
+  document.getElementById('tabLong').innerText =
+    `長休 ${durations.longBreak / 60}m`;
+}
+
+function saveTimerSettings() {
+  const focus = Number(
+    document.getElementById('focusMinutes').value
+  );
+  const short = Number(
+    document.getElementById('shortMinutes').value
+  );
+  const long = Number(
+    document.getElementById('longMinutes').value
+  );
+
+  const msg = document.getElementById('timerSettingsMsg');
+
+  if (![focus, short, long].every(Number.isInteger) ||
+      focus < 1 || focus > 120 ||
+      short < 1 || short > 60 ||
+      long < 1 || long > 60) {
+    msg.innerText = '請輸入有效的整數分鐘。';
+    return;
+  }
+
+  if (timerRunning ||
+      remainingMs !== durations[currentMode] * 1000) {
+    msg.innerText = '請先重設目前的計時器。';
+    return;
+  }
+
+  durations.focus = focus * 60;
+  durations.shortBreak = short * 60;
+  durations.longBreak = long * 60;
+
+  try {
+    localStorage.setItem(
+      'auraTimerSettings',
+      JSON.stringify(durations)
+    );
+    msg.innerText = '✓ 設定已儲存';
+  } catch (e) {
+    msg.innerText = '設定已套用，但瀏覽器無法保存。';
+  }
+
+  updateTimerTabs();
+  resetTimer();
+}
+
+function renderTimer() {
+  const m = Math.floor(timeLeft / 60);
+  const s = timeLeft % 60;
+
+  document.getElementById('timerTime').innerText =
+    String(m).padStart(2, '0') + ':' +
+    String(s).padStart(2, '0');
+
+  const total = durations[currentMode];
+  const progress = Math.max(
+    0, Math.min(1, (total - timeLeft) / total)
+  );
+
+  document.getElementById('timerProgress')
+    .style.strokeDashoffset = 534 * (1 - progress);
+}
+
+function stopTimerInterval() {
+  clearInterval(timerInterval);
+  timerInterval = null;
+  timerRunning = false;
+}
+
+function updateTimerButton() {
+  const btn = document.getElementById('btnPlayPause');
+
+  if (timerRunning) {
+    btn.innerText = '暫停';
+  } else if (remainingMs < durations[currentMode] * 1000) {
+    btn.innerText = '繼續';
+  } else {
+    btn.innerText = currentMode === 'focus'
+      ? '開始專注' : '開始休息';
+  }
+}
+
+function switchTimerMode(mode) {
+  if (!(mode in durations)) return;
+
+  stopTimerInterval();
+  currentMode = mode;
+
+  document.getElementById('tabFocus')
+    .classList.toggle('active', mode === 'focus');
+
+  document.getElementById('tabShort')
+    .classList.toggle('active', mode === 'shortBreak');
+
+  document.getElementById('tabLong')
+    .classList.toggle('active', mode === 'longBreak');
+
+  document.getElementById('timerLabel').innerText =
+    mode === 'focus' ? 'FOCUS' :
+    mode === 'shortBreak' ? 'SHORT BREAK' :
+    'LONG BREAK';
+
+  resetTimer();
+}
+
+function completeTimer() {
+  if (!timerRunning) return;
+
+  stopTimerInterval();
+
+  try {
+    playZenBell();
+  } catch (e) {
+    console.warn('提示音播放失敗', e);
+  }
+
+  if (currentMode === 'focus') {
+    cycleCount++;
+    roundCount++;
+
+    document.getElementById('cycleCount').innerText =
+      cycleCount;
+
+    if (roundCount >= 4) {
+      roundCount = 0;
+      switchTimerMode('longBreak');
+    } else {
+      switchTimerMode('shortBreak');
     }
+  } else {
+    switchTimerMode('focus');
+  }
+}
+
+function tickTimer() {
+  if (!timerRunning) return;
+
+  remainingMs = Math.max(0, endTime - Date.now());
+  timeLeft = Math.ceil(remainingMs / 1000);
+
+  renderTimer();
+
+  if (remainingMs <= 0) {
+    completeTimer();
+  }
+}
+
+function toggleTimer() {
+  if (timerRunning) {
+    tickTimer();
+
+    if (!timerRunning) return;
+
+    stopTimerInterval();
+    updateTimerButton();
+    return;
+  }
+
+  try {
+    getAudioContext();
+  } catch (e) {
+    console.warn('音訊初始化失敗', e);
+  }
+
+  endTime = Date.now() + remainingMs;
+  timerRunning = true;
+
+  timerInterval = setInterval(tickTimer, 200);
+
+  updateTimerButton();
+  tickTimer();
+}
+
+function resetTimer() {
+  stopTimerInterval();
+
+  timeLeft = durations[currentMode];
+  remainingMs = timeLeft * 1000;
+
+  updateTimerButton();
+  renderTimer();
+}
+
+function skipTimer() {
+  if (!confirm('確定跳過目前階段？')) return;
+
+  stopTimerInterval();
+
+  // 跳過不計入已完成的專注次數
+  switchTimerMode(
+    currentMode === 'focus' ? 'shortBreak' : 'focus'
+  );
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && timerRunning) {
+    tickTimer();
+  }
+});
+
+document.getElementById('focusMinutes').value =
+  durations.focus / 60;
+
+document.getElementById('shortMinutes').value =
+  durations.shortBreak / 60;
+
+document.getElementById('longMinutes').value =
+  durations.longBreak / 60;
+
+updateTimerTabs();
+resetTimer();
+
+
 
     // --- Breathing ---
     let breathRunning = false;
